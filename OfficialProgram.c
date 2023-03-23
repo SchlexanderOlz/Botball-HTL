@@ -1,9 +1,4 @@
 #include <kipr/wombat.h>
-#include <time.h>
-
-#define true 1;
-#define false 0;
-
 
 const int right_wheel = 0;
 const int left_wheel = 1;
@@ -18,53 +13,22 @@ double map(double x, double in_min, double in_max, double out_min, double out_ma
     return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
 }
 
-void drive(int distance_cm, int speed, int angle){
-    printf("New Drive Instance");
-    float right_speed = speed;
-    float left_speed = speed;
-    double mp = map(speed, 50, 100, 2, 1);
-    float direction = fabs(get_compass_angle() * (180 / 3.1415));
-    printf("%f", direction);
-    int start_seconds = (int)time(NULL);
-    const float mult = 0.1;
-    float new_dir = direction;
-    while(start_seconds + (62.5 * distance_cm * mp / 1000)  > (int)time(NULL)){
-        new_dir = fabs(get_compass_angle() * (180 / 3.1415));
-        printf("%f\n", new_dir);
-        if (new_dir < direction){
-            // Correct angle
-           	left_speed -= mult;
-            right_speed += mult;
-        }
-        else if (new_dir > direction){
-            right_speed -= mult;
-            left_speed += mult;
-        }
-        else{
-            right_speed = speed;
-            left_speed = speed;
-        }
-        motor(right_wheel, right_speed);
-        motor(left_wheel, left_speed);
-        msleep(100);
+void drive(int distance_cm, int speed){
+    cmpc(1);
+    cmpc(right_wheel);
+    motor(0, speed);
+    motor(1, speed);
+    while(1){
+        if(get_motor_position_counter(0) >= 82*distance_cm)
+            motor(0, 0);
+        if(get_motor_position_counter(1) >= 82*distance_cm)
+            motor(0, 0);
+        if(get_motor_position_counter(1) >= 82*distance_cm && get_motor_position_counter(0) >= 82*distance_cm)
+            break;
     }
-    printf("%f", mp);
-    motor(right_wheel, 0);
-    motor(left_wheel, 0);
-}
-
-void turnDegrees(int degrees, int speed){
-    int degs_start = (int)fabs(get_compass_angle() * (180 / 3.1415)) + degrees;
-    printf("\n%d\n", degs_start);
-    motor(right_wheel, speed);
-    motor(left_wheel, -speed);
-    while(degs_start >= (int)fabs(get_compass_angle() * (180 / 3.1415))){
-        printf("\n%d\n", (int)fabs(get_compass_angle() * (180 / 3.1415)));
-        msleep(10);
-        continue;
-    };
-    motor(right_wheel, 0);
-    motor(left_wheel, 0);
+    freeze(1);
+    freeze(0);
+    msleep(500);
 }
 
 void driveToBlackLine(int speed){
@@ -76,28 +40,56 @@ void driveToBlackLine(int speed){
     motor(left_wheel, 0);
 }
 
-int main()
-{
-    //wait_for_light(light_sensor); // Wait on port 2
-    //shut_down_in(119); // Stops the robot after 119 seconds
-    motor(right_wheel, 20);
-    motor(left_wheel, -20);
-    calibrate_compass();
-    //set_compass_params(-7.364000, -14.885000, -36.187000, 0.491131, -0.057895, 1.114096, 1.242885);
-    
-    drive(15, 20, 0);
-    turnDegrees(90, 10);
-    drive(15, 20, 90);
-    return 0;
+void rotate(int degrees, int speed){
+    cmpc(1);
+    cmpc(0);
+	mtp(left_wheel, speed*0.8, degrees*12.5);
+    mtp(right_wheel, speed*0.8, -degrees*12.5);
+    bmd(left_wheel);
+    bmd(right_wheel);
+    freeze(left_wheel);
+    freeze(right_wheel);
+    msleep(500);
 }
 
-void move_grabber()
+void FollowLine(int speed, int distance_cm){
+    int normal_speed = 30;
+    cmpc(0);
+    int left_speed = normal_speed;
+    int right_speed = normal_speed;
+    while(gmpc(0) < distance_cm*82){
+        int right_sensor = analog(2);
+        int left_sensor = analog(1);
+        if (right_sensor > 3000){
+            // Search for re-entry. Turn left and right and try to find black
+            left_speed /= 1.01;
+            right_speed *= 1.02;
+        }
+        else if(left_sensor > 3000){
+            right_speed /= 1.01;
+            left_speed *= 1.02;
+        }
+        else{
+            right_speed = normal_speed;
+            left_speed = normal_speed;
+        }
+        // Actually Drive the Motors
+        motor(0, right_speed);
+        motor(1, left_speed);
+    }
+}
+
+int main()
 {
-	motor(grabber_base, 100);
-    msleep(5000); // Time to move to top
-    motor(grabber_base, 0);
-    set_servo_position(grabber_left_right, 900);
-    msleep(500);
-    set_servo_position(grabber_up_down, 1100); // Adjust values so this actually puts all servos into a half opened mode
-	msleep(300);
+    // Range from 0 to 1500
+    int speed = 1200;
+    int normal_speed = map(speed, 0, 1500, 0, 100);
+    //wait_for_light(light_sensor); // Wait on port 2
+    //shut_down_in(119); // Stops the robot after 119 seconds
+    drive(20, 
+    return 0;
+    driveToBlackLine(normal_speed);
+    rotate(-10, speed);
+    FollowLine(normal_speed, 50);
+    return 0;
 }
